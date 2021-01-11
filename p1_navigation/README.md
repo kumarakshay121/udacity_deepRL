@@ -6,7 +6,7 @@
 
 ### Introduction
 
-The objective of this project is to train an agent to navigate (and collect bananas!) in a large, square world.  
+The objective of this project is to train an agent to navigate (and collect bananas!) in a large, square world.
 
 ![Trained Agent][image1]
 
@@ -22,7 +22,7 @@ The task is episodic, and in order to solve the environment, your agent must get
 
 ### Getting Started
 
-1. Clone this repository.
+1. Clone this repository. (mirror of Udacity's [DRLND repo](https://github.com/udacity/deep-reinforcement-learning))
 
 2. Download the environment from one of the links below.  You need only select the environment that matches your operating system:
     - Linux: [click here](https://s3-us-west-1.amazonaws.com/udacity-drlnd/P1/Banana/Banana_Linux.zip)
@@ -61,3 +61,7 @@ The task is episodic, and in order to solve the environment, your agent must get
 2. Adjust the path to the environment file.
 
 3. Experiment with the hyperparameters in `dqn_agent.py` and network architecture in `model.py` to improve training and performance.
+
+### Acknowledgement
+
+This DQN implementation is a modification of the code provided by Udacity in Deep Q-Networks lesson to solve the `LunarLander` Gym environment.
