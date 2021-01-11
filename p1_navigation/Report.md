@@ -16,8 +16,8 @@ Characteristic techniques of DQN that help train an agent better:
 
 The network consists of three fully-connected layers.
 
-	hidden layer 1: 64 units + Leaky RELU activation		
-	hidden layer 2: 64 units + Leaky RELU activation		
+	hidden layer 1: 64 units + Leaky RELU activation
+	hidden layer 2: 64 units + Leaky RELU activation
 	output layer: 4 units (action size)
 
 **Hyperparameters**
@@ -31,7 +31,7 @@ The network consists of three fully-connected layers.
 
 ## Results
 
-![Scores]()
+![Scores](https://github.com/kumarakshay121/udacity_deepRL/blob/master/p1_navigation/rewards.png)
 
 The agent was able to solve the environment is 380 episodes, by maintaining an average score of 13.0+ across 100 consecutive episodes.
 
