@@ -15,23 +15,23 @@ Characteristic techniques of DQN that help train an agent better:
 **Network Architecture**
 
 The network consists of three fully-connected layers.
-
+```bash
 	hidden layer 1: 64 units + Leaky RELU activation
 	hidden layer 2: 64 units + Leaky RELU activation
 	output layer: 4 units (action size)
-
+```
 **Hyperparameters**
-
+```bash
 	BUFFER_SIZE = int(1e5)  # replay buffer size
 	BATCH_SIZE = 64         # minibatch size
 	GAMMA = 0.99            # discount factor
 	TAU = 1e-3              # for soft update of target parameters
 	LR = 5e-4               # learning rate 
 	UPDATE_EVERY = 4        # how often to update the network
-
+```
 ## Results
 
-![Scores](https://github.com/kumarakshay121/udacity_deepRL/blob/master/p1_navigation/rewards.png)
+![Scores](https://github.com/kumarakshay121/udacity_deepRL/blob/master/p1_navigation/scores.png)
 
 The agent was able to solve the environment is 380 episodes, by maintaining an average score of 13.0+ across 100 consecutive episodes.
 
