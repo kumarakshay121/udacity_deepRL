@@ -68,7 +68,7 @@ The environment is considered solved, when the average (over 100 episodes) of th
 
 2. Adjust the path to the environment file.
 
-3. Experiment with the hyperparameters in `ddpg_agent.py` and network architecture in `model.py` to improve training and performance.
+3. Experiment with the hyperparameters in `Continuous_Control.ipynb`, the agent in `ddpg_agent.py` and network architecture in `model.py` to improve training and performance.
 
 ### Acknowledgement
 
