@@ -9,13 +9,6 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 
-BUFFER_SIZE = int(1e6)  # replay buffer size
-BATCH_SIZE = 128        # minibatch size
-GAMMA = 0.99            # discount factor
-TAU = 1e-3              # for soft update of target parameters
-LR_ACTOR = 1e-4         # learning rate of the actor
-LR_CRITIC = 1e-4        # learning rate of the critic
-WEIGHT_DECAY = 0.0      # L2 weight decay
 LEARN_UPDATES = 10      # number of learning updates
 UPDATE_EVERY = 20       # how often to update the network
 
@@ -25,34 +18,38 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class Agent():
     """Interacts with and learns from the environment."""
 
-    def __init__(self, state_size, action_size, num_agents, random_seed):
+    def __init__(self, state_size, action_size, num_agents, params, random_seed=0):
         """Initialize an Agent object.
         Params
         ======
             state_size (int): dimension of each state
             action_size (int): dimension of each action
+            num_agents (int): number of agents
+            params (dict): hyperparameters
             random_seed (int): random seed
         """
         self.state_size = state_size
         self.action_size = action_size
         self.num_agents = num_agents
-        self.seed = random.seed(random_seed)
+        self.params = params
+        random.seed(random_seed)
 
         # Actor Network (w/ Target Network)
         self.actor_local = Actor(state_size, action_size, random_seed).to(device)
         self.actor_target = Actor(state_size, action_size, random_seed).to(device)
-        self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=LR_ACTOR)
+        self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=self.params['lr_actor'])
 
         # Critic Network (w/ Target Network)
         self.critic_local = Critic(state_size, action_size, random_seed).to(device)
         self.critic_target = Critic(state_size, action_size, random_seed).to(device)
-        self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
+        self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=self.params['lr_critic'],
+                                           weight_decay=self.params['weight_decay'])
 
         # Noise process
         self.noise = OUNoise(action_size, random_seed)
 
         # Replay memory
-        self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed)
+        self.memory = ReplayBuffer(action_size, self.params['buffer_size'], self.params['batch_size'], random_seed)
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
 
@@ -66,10 +63,10 @@ class Agent():
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
             # Learn, if enough samples are available in memory
-            if len(self.memory) > BATCH_SIZE:
+            if len(self.memory) > self.params['batch_size']:
                 for i in range(LEARN_UPDATES):
                     experiences = self.memory.sample()
-                    self.learn(experiences, GAMMA)
+                    self.learn(experiences, self.params['gamma'])
                 
     def act(self, states, add_noise=True):
         """Returns actions for given state as per current policy."""
@@ -125,8 +122,8 @@ class Agent():
         self.actor_optimizer.step()
 
         # ----------------------- update target networks ----------------------- #
-        self.soft_update(self.critic_local, self.critic_target, TAU)
-        self.soft_update(self.actor_local, self.actor_target, TAU)
+        self.soft_update(self.critic_local, self.critic_target, self.params['tau'])
+        self.soft_update(self.actor_local, self.actor_target, self.params['tau'])
 
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
@@ -188,14 +185,18 @@ class ReplayBuffer:
         """Randomly sample a batch of experiences from memory."""
         experiences = random.sample(self.memory, k=self.batch_size)
 
-        states = torch.from_numpy(np.vstack([e.state for e in experiences if e is not None])).float().to(device)
-        actions = torch.from_numpy(np.vstack([e.action for e in experiences if e is not None])).float().to(device)
-        rewards = torch.from_numpy(np.vstack([e.reward for e in experiences if e is not None])).float().to(device)
-        next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(device)
-        dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(device)
+        states = self.convert_to_tensor(np.vstack([e.state for e in experiences if e is not None]))
+        actions = self.convert_to_tensor(np.vstack([e.action for e in experiences if e is not None]))
+        rewards = self.convert_to_tensor(np.vstack([e.reward for e in experiences if e is not None]))
+        next_states = self.convert_to_tensor(np.vstack([e.next_state for e in experiences if e is not None]))
+        dones = self.convert_to_tensor(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8))
 
         return (states, actions, rewards, next_states, dones)
 
+    def convert_to_tensor(self, array):
+        """Convert numpy array to tensor"""
+        return torch.from_numpy(array).float().to(device)
+    
     def __len__(self):
         """Return the current size of internal memory."""
         return len(self.memory)
