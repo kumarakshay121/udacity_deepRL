@@ -15,10 +15,10 @@ UPDATE_EVERY = 20       # how often to update the network
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-class Agent():
+class Agent:
     """Interacts with and learns from the environment."""
 
-    def __init__(self, state_size, action_size, num_agents, params, random_seed=0):
+    def __init__(self, state_size, action_size, num_agents, params, seed=0):
         """Initialize an Agent object.
         Params
         ======
@@ -26,30 +26,30 @@ class Agent():
             action_size (int): dimension of each action
             num_agents (int): number of agents
             params (dict): hyperparameters
-            random_seed (int): random seed
+            seed (int): random seed
         """
         self.state_size = state_size
         self.action_size = action_size
         self.num_agents = num_agents
         self.params = params
-        random.seed(random_seed)
+        random.seed(seed)
 
         # Actor Network (w/ Target Network)
-        self.actor_local = Actor(state_size, action_size, random_seed).to(device)
-        self.actor_target = Actor(state_size, action_size, random_seed).to(device)
+        self.actor_local = Actor(state_size, action_size, seed).to(device)
+        self.actor_target = Actor(state_size, action_size, seed).to(device)
         self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=self.params['lr_actor'])
 
         # Critic Network (w/ Target Network)
-        self.critic_local = Critic(state_size, action_size, random_seed).to(device)
-        self.critic_target = Critic(state_size, action_size, random_seed).to(device)
+        self.critic_local = Critic(state_size, action_size, seed).to(device)
+        self.critic_target = Critic(state_size, action_size, seed).to(device)
         self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=self.params['lr_critic'],
                                            weight_decay=self.params['weight_decay'])
 
         # Noise process
-        self.noise = OUNoise(action_size, random_seed)
+        self.noise = OUNoise(action_size, seed)
 
         # Replay memory
-        self.memory = ReplayBuffer(action_size, self.params['buffer_size'], self.params['batch_size'], random_seed)
+        self.memory = ReplayBuffer(self.params['buffer_size'], self.params['batch_size'], seed)
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
 
@@ -97,7 +97,26 @@ class Agent():
         """
         states, actions, rewards, next_states, dones = experiences
 
-        # ---------------------------- update critic ---------------------------- #
+        # Update critic
+        self.update_critic(states, actions, rewards, next_states, dones, gamma)
+        # Update actor
+        self.update_actor(states)
+        # Update target networks
+        self.soft_update(self.critic_local, self.critic_target, self.params['tau'])
+        self.soft_update(self.actor_local, self.actor_target, self.params['tau'])
+
+    def update_actor(self, states):
+        """Update actor parameters using given batch of experience tuples."""
+        # Compute actor loss
+        actions_pred = self.actor_local(states)
+        actor_loss = -self.critic_local(states, actions_pred).mean()
+        # Minimize the loss
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
+        
+    def update_critic(self, states, actions, rewards, next_states, dones, gamma):
+        """Update critic parameters using given batch of experience tuples."""
         # Get predicted next-state actions and Q values from target models
         actions_next = self.actor_target(next_states)
         Q_targets_next = self.critic_target(next_states, actions_next)
@@ -111,20 +130,7 @@ class Agent():
         critic_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.critic_local.parameters(), 1)
         self.critic_optimizer.step()
-
-        # ---------------------------- update actor ---------------------------- #
-        # Compute actor loss
-        actions_pred = self.actor_local(states)
-        actor_loss = -self.critic_local(states, actions_pred).mean()
-        # Minimize the loss
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        self.actor_optimizer.step()
-
-        # ----------------------- update target networks ----------------------- #
-        self.soft_update(self.critic_local, self.critic_target, self.params['tau'])
-        self.soft_update(self.actor_local, self.actor_target, self.params['tau'])
-
+        
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
         θ_target = τ*θ_local + (1 - τ)*θ_target
@@ -145,8 +151,8 @@ class OUNoise:
         self.mu = mu * np.ones(size)
         self.theta = theta
         self.sigma = sigma
-        self.seed = random.seed(seed)
         self.size = size
+        random.seed(seed)
         self.reset()
 
     def reset(self):
@@ -163,18 +169,17 @@ class OUNoise:
 class ReplayBuffer:
     """Fixed-size buffer to store experience tuples."""
 
-    def __init__(self, action_size, buffer_size, batch_size, seed):
+    def __init__(self, buffer_size, batch_size, seed):
         """Initialize a ReplayBuffer object.
         Params
         ======
             buffer_size (int): maximum size of buffer
             batch_size (int): size of each training batch
         """
-        self.action_size = action_size
         self.memory = deque(maxlen=buffer_size)  # internal memory (deque)
         self.batch_size = batch_size
         self.experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
-        self.seed = random.seed(seed)
+        random.seed(seed)
 
     def add(self, state, action, reward, next_state, done):
         """Add a new experience to memory."""

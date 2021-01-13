@@ -10,33 +10,78 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 BUFFER_SIZE = int(1e6)  # replay buffer size
-BATCH_SIZE = 128        # minibatch size
+BATCH_SIZE = 256        # minibatch size
 GAMMA = 0.99            # discount factor
 TAU = 1e-3              # for soft update of target parameters
 LR_ACTOR = 1e-4         # learning rate of the actor
-LR_CRITIC = 1e-4        # learning rate of the critic
+LR_CRITIC = 1e-3        # learning rate of the critic
 WEIGHT_DECAY = 0.0      # L2 weight decay
-LEARN_UPDATES = 10      # number of learning updates
-UPDATE_EVERY = 20       # how often to update the network
+LEARN_UPDATES = 2       # number of learning updates
+UPDATE_EVERY = 2        # how often to update the network
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-class Agent():
-    """Interacts with and learns from the environment."""
+class MADDPG:
 
-    def __init__(self, state_size, action_size, num_agents, random_seed):
-        """Initialize an Agent object.
+    def __init__(self, state_size, action_size, num_agents, random_seed=0):
+        """Initialize a multi-agent object.
         Params
         ======
             state_size (int): dimension of each state
             action_size (int): dimension of each action
+            num_agents (int): number of agents
             random_seed (int): random seed
         """
         self.state_size = state_size
         self.action_size = action_size
         self.num_agents = num_agents
-        self.seed = random.seed(random_seed)
+        random.seed(random_seed)
+        
+        # Replay memory
+        self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed)
+        # Multi-agents
+        self.agents = [Agent(state_size, action_size, self.memory, random_seed) for i in range(num_agents)]
+        
+    def step(self, states, actions, rewards, next_states, dones):
+        """Save experience in replay memory and use random sample from buffer to learn."""
+        for i in range(self.num_agents):
+            self.memory.add(states[i], actions[i], rewards[i], next_states[i], dones[i])
+        
+        for agent in self.agents:
+            agent.step()
+
+    def act(self, states, add_noise=True):
+        """Returns actions for each agent for given state as per current policy."""
+        actions = np.zeros((self.num_agents, self.action_size))
+        for i, agent in enumerate(self.agents):
+            actions[i,:] = agent.act(states[i], add_noise)
+        return actions
+
+    def save_weights(self):
+        for index, agent in enumerate(self.agents):
+            torch.save(agent.actor_local.state_dict(), 'agent{}_checkpoint_actor.pth'.format(index+1))
+            torch.save(agent.critic_local.state_dict(), 'agent{}_checkpoint_critic.pth'.format(index+1))
+    
+    def reset(self):        
+        for agent in self.agents:
+            agent.reset()
+
+class Agent:
+    """Interacts with and learns from the environment."""
+
+    def __init__(self, state_size, action_size, memory, random_seed=0):
+        """Initialize an Agent object.
+        Params
+        ======
+            state_size (int): dimension of each state
+            action_size (int): dimension of each action
+            memory (ReplayBuffer): shared replay buffer
+            random_seed (int): random seed
+        """
+        self.state_size = state_size
+        self.action_size = action_size
+        random.seed(random_seed)
 
         # Actor Network (w/ Target Network)
         self.actor_local = Actor(state_size, action_size, random_seed).to(device)
@@ -52,16 +97,12 @@ class Agent():
         self.noise = OUNoise(action_size, random_seed)
 
         # Replay memory
-        self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed)
+        self.memory = memory
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
 
-    def step(self, states, actions, rewards, next_states, dones):
-        """Save experience in replay memory, and use random sample from buffer to learn."""
-        # Save experience / reward
-        for i in range(self.num_agents):
-            self.memory.add(states[i], actions[i], rewards[i], next_states[i], dones[i])
-
+    def step(self):
+        """Use random sample from buffer to learn."""
         # Learn every UPDATE_EVERY time steps
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
@@ -70,19 +111,17 @@ class Agent():
                 for i in range(LEARN_UPDATES):
                     experiences = self.memory.sample()
                     self.learn(experiences, GAMMA)
-                
-    def act(self, states, add_noise=True):
+
+    def act(self, state, add_noise=True):
         """Returns actions for given state as per current policy."""
-        states = torch.from_numpy(states).float().to(device)
-        actions = np.zeros((self.num_agents, self.action_size))
+        state = torch.from_numpy(state).float().to(device)
         self.actor_local.eval()
         with torch.no_grad():
-            for i, state in enumerate(states):
-                actions[i,:] = self.actor_local(state).cpu().data.numpy()
+            action = self.actor_local(state).cpu().data.numpy()
         self.actor_local.train()
         if add_noise:
-            actions += self.noise.sample()
-        return np.clip(actions, -1, 1)
+            action += self.noise.sample()
+        return np.clip(action, -1, 1)
 
     def reset(self):
         self.noise.reset()
@@ -148,8 +187,8 @@ class OUNoise:
         self.mu = mu * np.ones(size)
         self.theta = theta
         self.sigma = sigma
-        self.seed = random.seed(seed)
         self.size = size
+        random.seed(seed)
         self.reset()
 
     def reset(self):
@@ -188,14 +227,18 @@ class ReplayBuffer:
         """Randomly sample a batch of experiences from memory."""
         experiences = random.sample(self.memory, k=self.batch_size)
 
-        states = torch.from_numpy(np.vstack([e.state for e in experiences if e is not None])).float().to(device)
-        actions = torch.from_numpy(np.vstack([e.action for e in experiences if e is not None])).float().to(device)
-        rewards = torch.from_numpy(np.vstack([e.reward for e in experiences if e is not None])).float().to(device)
-        next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(device)
-        dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(device)
+        states = self.convert_to_tensor(np.vstack([e.state for e in experiences if e is not None]))
+        actions = self.convert_to_tensor(np.vstack([e.action for e in experiences if e is not None]))
+        rewards = self.convert_to_tensor(np.vstack([e.reward for e in experiences if e is not None]))
+        next_states = self.convert_to_tensor(np.vstack([e.next_state for e in experiences if e is not None]))
+        dones = self.convert_to_tensor(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8))
 
         return (states, actions, rewards, next_states, dones)
 
+    def convert_to_tensor(self, array):
+        """Convert numpy array to tensor"""
+        return torch.from_numpy(array).float().to(device)
+    
     def __len__(self):
         """Return the current size of internal memory."""
         return len(self.memory)
